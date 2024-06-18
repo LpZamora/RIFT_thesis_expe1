@@ -89,3 +89,17 @@ def snr_spectrum(psd, noise_n_neighbor_freqs=1, noise_skip_neighbor_freqs=1):
     mean_noise = np.pad(mean_noise, pad_width=pad_width, constant_values=np.nan)
 
     return psd / mean_noise
+
+
+def frequency_rescaling(A):
+    '''
+    Rescale frequency for statistical analysis as in Adamian & Andersen, 2024
+    object is PSD, shape is frequency, cueing condition
+    '''
+    # Average across cueing condition
+    mean_Ajk = np.mean(A, axis=1, keepdims=True)
+
+    # Divide each amplitude Ajk by the mean frequency for all cueing condition
+    normalized_Ajk = A / mean_Ajk
+
+    return normalized_Ajk
