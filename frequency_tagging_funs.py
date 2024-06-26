@@ -97,9 +97,37 @@ def frequency_rescaling(A):
     object is PSD, shape is frequency, cueing condition
     '''
     # Average across cueing condition
-    mean_Ajk = np.mean(A, axis=1, keepdims=True)
+    mean_Ajk = np.mean(A)
 
     # Divide each amplitude Ajk by the mean frequency for all cueing condition
     normalized_Ajk = A / mean_Ajk
 
     return normalized_Ajk
+
+def ssvep_amplitudes(epochs, electrodes, tmin, tmax):
+    '''
+    For each condition in queries, each trial and electrode, return the complex Fourier coefficient
+
+    based on the method in in Chota, Bruat, Stigchel & Strauch 2023
+    '''
+    
+    # Calculate FFT over trial-averaged signal
+    data = epochs.copy().crop(tmin=tmin, tmax=tmax).pick(electrodes).average().get_data()
+
+    # Zero-pad the data to increase freq resolution and faster computation (power of 2)
+    padded_data = np.zeros((len(electrodes), 2**15))
+    padded_data[:, :data.shape[1]] = data
+    # For all electrodes
+    N = padded_data.shape[-1]
+    fft_values = np.fft.fft(padded_data, axis=-1)
+    fft_freq = np.fft.fftfreq(N, 1/epochs.info['sfreq'])
+    
+    # Only keep the positive frequencies (fourier coefficients)
+    positive_freq_indices = np.where(fft_freq >= 0)
+    fft_freq = fft_freq[positive_freq_indices]
+    fft_values = fft_values[:,positive_freq_indices]
+    
+    # Compute the magnitude of the FFT
+    fft_magnitude = np.abs(fft_values)**2
+
+    return fft_freq, fft_magnitude.squeeze()
