@@ -1,5 +1,6 @@
 # Functions for the frequency tagging condition of the experiment 1 
 import scipy
+import copy
 import numpy as np
 
 def coherence_kabir(signalX, pick, freq_of_interest):
@@ -8,38 +9,37 @@ def coherence_kabir(signalX, pick, freq_of_interest):
     min_time = signalX.times[0]
     max_time = signalX.times[-1]
     sampling_rate = signalX.info['sfreq']
-    
+    n = len(signalX)  # number of trials
+
     # Band-pass EEG (+/-1.9Hz) and apply hilbert
-    signalX = signalX.copy().pick(pick).filter(l_freq=freq_of_interest - .5, h_freq=freq_of_interest + .5,
-        method='iir', iir_params=dict(order=4, ftype='butter'), phase='zero', fir_window='hamming', verbose = False)
-    #filter(l_freq = freq_of_interest - 1.9, h_freq = freq_of_interest + 1.9, verbose=True)
-    
-    signalX = np.squeeze(signalX.get_data(copy=False)).T
-    signalXh =  scipy.signal.hilbert(signalX, axis=1)
-    n = signalXh.shape[1]  # number of trials
+    signalX = signalX.copy().pick(pick).filter(l_freq=freq_of_interest - 1.9, h_freq=freq_of_interest + 1.9,
+        method='iir', iir_params=dict(order=4, ftype='butter'), verbose = False).get_data(copy=False)
+    signalX = np.squeeze(signalX).T
+    signalXh = scipy.signal.hilbert(signalX, axis=0)
 
     #Create sine wave
-    t = np.linspace(min_time, max_time, int(sampling_rate * (np.abs(min_time) + max_time))+1, endpoint=False)
+    t = np.linspace(min_time, max_time, int(sampling_rate* (np.abs(min_time) + max_time)+1))
     signalY = np.sin(2 * np.pi * freq_of_interest * t)
-    signalY = np.tile(signalY, (n,1)).T #repeat over trials
+    signalY = np.tile(signalY, (n,1)) #repeat over trials
+    
     # Hilbert transform
-    signalYh = scipy.signal.hilbert(signalY.T, axis=1)
+    signalYh = scipy.signal.hilbert(signalY.T, axis=0)
 
     # Magnitude
     mX = np.abs(signalXh).T
-    mY = np.abs(signalYh)
+    mY = np.abs(signalYh).T
 
     # Phase difference
-    phase_diff = np.angle(signalXh).T - np.angle(signalYh)
-
-    coh = np.zeros(signalY.shape[0])
-    for t in range(signalY.shape[0]):
+    phase_diff = np.angle(signalXh).T - np.angle(signalYh).T
+    
+    coh = np.zeros(signalY.shape[1])
+    for t in range(signalY.shape[1]):
         num = ((np.abs(np.sum(mX[:, t] * mY[:, t] * np.exp(1j * phase_diff[:, t])) / n)) ** 2)
         denom = (np.sum((mX[:, t]**2) * (mY[:, t]**2)) / n)
         coh[t] = num/denom
         
     return coh
-
+    
 def snr_spectrum(psd, noise_n_neighbor_freqs=1, noise_skip_neighbor_freqs=1):
     """
     # Signal to noise ratio (Meigen & Bach (1999))
@@ -90,19 +90,6 @@ def snr_spectrum(psd, noise_n_neighbor_freqs=1, noise_skip_neighbor_freqs=1):
 
     return psd / mean_noise
 
-
-def frequency_rescaling(A):
-    '''
-    Rescale frequency for statistical analysis as in Adamian & Andersen, 2024
-    object is PSD, shape is frequency, cueing condition
-    '''
-    # Average across cueing condition
-    mean_Ajk = np.mean(A)
-
-    # Divide each amplitude Ajk by the mean frequency for all cueing condition
-    normalized_Ajk = A / mean_Ajk
-
-    return normalized_Ajk
 
 def ssvep_amplitudes(epochs, electrodes, tmin, tmax):
     '''
